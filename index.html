@@ -92,7 +92,15 @@
         
         // --- Globals ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+         const firebaseConfig = {
+    apiKey: "AIzaSyCrKQpx3rZN2Y0Asy8HL08kv89eVQhoDck",
+    authDomain: "race-timer-6b61e.firebaseapp.com",
+    projectId: "race-timer-6b61e",
+    storageBucket: "race-timer-6b61e.firebasestorage.app",
+    messagingSenderId: "933028970429",
+    appId: "1:933028970429:web:2c3a5a02c2d6682bde5cd4",
+    measurementId: "G-D54Y5VYDT6"
+  };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // --- Firebase Init ---
@@ -581,4 +589,5 @@
     </div>
 </body>
 </html>
+
 
