@@ -92,15 +92,15 @@
         
         // --- Globals ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
-         const firebaseConfig = {
-    apiKey: "AIzaSyCrKQpx3rZN2Y0Asy8HL08kv89eVQhoDck",
-    authDomain: "race-timer-6b61e.firebaseapp.com",
-    projectId: "race-timer-6b61e",
-    storageBucket: "race-timer-6b61e.firebasestorage.app",
-    messagingSenderId: "933028970429",
-    appId: "1:933028970429:web:2c3a5a02c2d6682bde5cd4",
-    measurementId: "G-D54Y5VYDT6"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyCrKQpx3rZN2Y0Asy8HL08kv89eVQhoDck",
+  authDomain: "race-timer-6b61e.firebaseapp.com",
+  projectId: "race-timer-6b61e",
+  storageBucket: "race-timer-6b61e.firebasestorage.app",
+  messagingSenderId: "933028970429",
+  appId: "1:933028970429:web:2c3a5a02c2d6682bde5cd4",
+  measurementId: "G-D54Y5VYDT6"
+        };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // --- Firebase Init ---
@@ -120,17 +120,16 @@
         let currentRaceId = null;
         let activeTimers = {};
         
-        // --- DOM Elements (Declared here, assigned in DOMContentLoaded) ---
+        // --- DOM Elements ---
         let raceIdInput, loadRaceBtn, newRaceBtn, raceInfoDiv, raceTimerContainer;
         let riderForm, ridersTableBody, resultsTableBody, riderCountDisplay;
-        let startTimerBtn, timingRiderInput, timingStageSelect, messageBox, activeTimersList, stageCountInput;
+        let startTimerBtn, timingRiderInput, timingStageSelect, messageBox, activeTimersList, stageCountInput, exportCsvBtn;
 
         // --- Auth Listener ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
             } else {
-                // If no user, try to sign in.
                 try {
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
@@ -142,7 +141,6 @@
                 }
             }
             
-            // Update UI with user info regardless of sign-in method
             userId = auth.currentUser ? auth.currentUser.uid : 'anonymous';
             const userIdDisplay = document.getElementById('userIdDisplay');
             const appIdDisplay = document.getElementById('appIdDisplay');
@@ -382,7 +380,7 @@
                             const newTimeInSeconds = parseTimeToSeconds(newTimeStr);
                             if (newTimeInSeconds !== null) {
                                 updateTime(rider.number, i, newTimeInSeconds);
-                            } else if (newTimeStr.trim() === '' || newTimeStr.toLowerCase() === 'n/a') { // Allow clearing the time
+                            } else if (newTimeStr.trim() === '' || newTimeStr.toLowerCase() === 'n/a') {
                                 updateTime(rider.number, i, null);
                             } else {
                                 showMessage('Invalid time format.', true);
@@ -406,7 +404,7 @@
 
             const incompleteRiders = raceData.riders.filter(rider => rider.totalTime === null);
 
-            [...sortedRiders, ...incompleteRiders].forEach((rider, index) => {
+            [...sortedRiders, ...incompleteRiders].forEach((rider) => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 row.innerHTML = `
@@ -443,7 +441,6 @@
             const timerDocId = `${riderNumber}-${stageIndex}`;
             const timerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId, 'timers', timerDocId);
 
-            // Check if timer already exists
             const existingTimer = await getDoc(timerDocRef);
             if (existingTimer.exists()) {
                 return showMessage(`Timer is already active for Rider #${riderNumber}, Stage ${parseInt(stageIndex, 10) + 1}.`, true);
@@ -462,6 +459,46 @@
             }
         };
 
+        const exportResultsToCsv = () => {
+            if (!raceData || raceData.riders.length === 0) {
+                showMessage('No results to export.', true);
+                return;
+            }
+
+            const sortedRiders = [...raceData.riders]
+                .filter(rider => rider.totalTime !== null)
+                .sort((a, b) => a.totalTime - b.totalTime);
+            const incompleteRiders = raceData.riders.filter(rider => rider.totalTime === null);
+            const allRidersRanked = [...sortedRiders, ...incompleteRiders];
+
+            const headers = ["Rank", "Rider #", "Name", "Total Time"];
+            for (let i = 0; i < raceData.stages; i++) {
+                headers.push(`Stage ${i + 1}`);
+            }
+            let csvContent = headers.join(",") + "\r\n";
+
+            allRidersRanked.forEach((rider) => {
+                const rank = rider.totalTime !== null ? sortedRiders.findIndex(r => r.number === rider.number) + 1 : 'N/A';
+                const name = `"${rider.name.replace(/"/g, '""')}"`; // Quote names and escape double quotes
+                const totalTime = formatTime(rider.totalTime);
+                const rowData = [rank, rider.number, name, totalTime];
+                rider.times.forEach(time => {
+                    rowData.push(formatTime(time));
+                });
+                csvContent += rowData.join(",") + "\r\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `race_results_${currentRaceId || 'export'}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
         window.addEventListener('DOMContentLoaded', () => {
             raceIdInput = document.getElementById('raceIdInput');
             loadRaceBtn = document.getElementById('loadRaceBtn');
@@ -478,6 +515,7 @@
             messageBox = document.getElementById('messageBox');
             activeTimersList = document.getElementById('activeTimersList');
             stageCountInput = document.getElementById('stageCountInput');
+            exportCsvBtn = document.getElementById('exportCsvBtn');
             
             stageCountInput.value = 6;
             
@@ -485,6 +523,7 @@
             newRaceBtn.addEventListener('click', createNewRace);
             riderForm.addEventListener('submit', addRider);
             startTimerBtn.addEventListener('click', startTimer);
+            exportCsvBtn.addEventListener('click', exportResultsToCsv);
         });
     </script>
 
@@ -568,7 +607,10 @@
             </div>
 
             <div class="card p-0 overflow-hidden">
-                <h2 class="text-2xl font-bold text-gray-800 p-6">Current Standings</h2>
+                <div class="flex justify-between items-center p-6 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold text-gray-800">Current Standings</h2>
+                    <button id="exportCsvBtn" class="button px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md shadow-md hover:bg-blue-700">Export to CSV</button>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[500px]">
                         <thead>
@@ -589,5 +631,4 @@
     </div>
 </body>
 </html>
-
 
