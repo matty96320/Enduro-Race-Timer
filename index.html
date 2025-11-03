@@ -18,7 +18,8 @@
         .card {
             background-color: #ffffff;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
             padding: 2rem;
         }
         .button {
@@ -26,23 +27,7 @@
         }
         .button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-        }
-        .stage-input-cell input {
-            width: 100%;
-            text-align: center;
-        }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border-left-color: #4f46e5;
-            animation: spin 1s ease infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
         .header-bg {
             background: linear-gradient(to right, #4c51bf, #6b46c1);
@@ -52,8 +37,12 @@
             border-spacing: 0;
         }
         th, td {
-            padding: 0.75rem;
+            padding: 0.75rem 1rem;
             text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        tbody tr:last-child td {
+            border-bottom: none;
         }
         th:first-child, td:first-child {
             border-top-left-radius: 8px;
@@ -64,91 +53,95 @@
             border-bottom-right-radius: 8px;
         }
         thead th {
-            background-color: #e5e7eb;
+            background-color: #f9fafb;
             color: #4b5563;
             font-weight: 600;
             text-transform: uppercase;
+            font-size: 0.75rem;
             letter-spacing: 0.05em;
-        }
-        tbody tr {
-            background-color: #ffffff;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        tbody tr:last-child {
-            border-bottom: none;
         }
         tbody tr:nth-child(even) {
             background-color: #f9fafb;
         }
+        .tab-button {
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border: 2px solid transparent;
+        }
+        .tab-button.active {
+            background-color: #ffffff;
+            color: #4f46e5;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .tab-button:not(.active) {
+            color: #6b7280;
+        }
+         .tab-button:not(.active):hover {
+            background-color: #f0f0f5;
+        }
+        .pill-button {
+            background-color: #e0e7ff;
+            color: #3730a3;
+            border-radius: 9999px;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            margin: 0.25rem;
+        }
+        .pill-button button {
+            margin-left: 0.5rem;
+            color: #c7d2fe;
+            font-weight: bold;
+        }
+        .pill-button button:hover {
+            color: #3730a3;
+        }
+
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8 flex flex-col items-center">
 
-    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- Globals ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
-const firebaseConfig = {
-  apiKey: "AIzaSyCrKQpx3rZN2Y0Asy8HL08kv89eVQhoDck",
-  authDomain: "race-timer-6b61e.firebaseapp.com",
-  projectId: "race-timer-6b61e",
-  storageBucket: "race-timer-6b61e.firebasestorage.app",
-  messagingSenderId: "933028970429",
-  appId: "1:933028970429:web:2c3a5a02c2d6682bde5cd4",
-  measurementId: "G-D54Y5VYDT6"
-        };
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // --- Firebase Init ---
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        // --- Global State ---
-        let raceData = {
-            riders: [],
-            stages: 6
-        };
+        let app, db, auth;
+        let raceData = { riders: [], stages: 6, categories: [], displayMessage: '' };
         let authReady = false;
-        let raceUnsubscribe = null;
-        let timersUnsubscribe = null;
-        let userId = null;
-        let currentRaceId = null;
+        let raceUnsubscribe = null, timersUnsubscribe = null;
+        let userId = null, currentRaceId = null, currentTimingStage = null;
+        let currentOfflineTimingStage = null;
         let activeTimers = {};
+        const MAX_RIDERS = 250; 
         
-        // --- DOM Elements ---
         let raceIdInput, loadRaceBtn, newRaceBtn, raceInfoDiv, raceTimerContainer;
         let riderForm, ridersTableBody, resultsTableBody, riderCountDisplay;
-        let startTimerBtn, timingRiderInput, timingStageSelect, messageBox, activeTimersList, stageCountInput, exportCsvBtn;
+        let startTimerBtn, timingRiderInput, messageBox, activeTimersList, stageCountInput, exportCsvBtn;
+        let stageSelectionContainer, timingStationSelect, startTimingStationBtn, timingStationActive, timingStationHeader, switchStageBtn;
+        let stageStandingsHeader, stageStandingsBody;
+        let riderCsvInput, processCsvBtn; 
+        let toggleViewBtn, tabButtons, tabContents;
+        let raceNameInput, currentRaceNameDisplay;
+        let categoryNameInput, addCategoryBtn, categoryListContainer, riderCategorySelect;
+        let editStageCountBtn;
+        let displayMessageInput, updateDisplayMessageBtn;
 
-        // --- Auth Listener ---
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-            } else {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (error) {
-                    console.error("Authentication failed:", error);
-                }
-            }
-            
-            userId = auth.currentUser ? auth.currentUser.uid : 'anonymous';
-            const userIdDisplay = document.getElementById('userIdDisplay');
-            const appIdDisplay = document.getElementById('appIdDisplay');
-            if (userIdDisplay) userIdDisplay.textContent = `User ID: ${auth.currentUser.isAnonymous ? '(Anon) ' : ''}${userId}`;
-            if (appIdDisplay) appIdDisplay.textContent = `App ID: ${appId}`;
-            
-            authReady = true;
-        });
+        let offlineStageSelectionContainer, offlineTimingStationSelect, startOfflineTimingBtn, offlineTimingStationActive;
+        let offlineTimingStationHeader, switchOfflineStageBtn, offlineRiderInput, offlineStartBtn, offlineFinishBtn;
+        let pendingSyncList, manualSyncBtn;
+        
+
+        const getPendingTimers = () => {
+            return JSON.parse(localStorage.getItem('pendingTimers') || '[]');
+        };
+        const savePendingTimers = (logs) => {
+            localStorage.setItem('pendingTimers', JSON.stringify(logs));
+        };
 
         const showMessage = (message, isError = false) => {
             if (!messageBox) return;
@@ -157,26 +150,44 @@ const firebaseConfig = {
             messageBox.classList.remove('opacity-0', 'scale-95');
             messageBox.classList.add('opacity-100', 'scale-100');
             setTimeout(() => {
-                messageBox.classList.remove('opacity-100', 'scale-100');
+                messageBox.classList.remove('opacity-0', 'scale-95');
                 messageBox.classList.add('opacity-0', 'scale-95');
             }, 3000);
         };
 
-        const setupRaceListener = (raceId) => {
+        const setupRaceListener = (raceId, newRaceName = null) => {
             if (raceUnsubscribe) raceUnsubscribe();
             currentRaceId = raceId;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
             const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', raceId);
+            
             raceUnsubscribe = onSnapshot(raceDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     raceData = docSnap.data();
+                    if (!raceData.categories) raceData.categories = [];
+                    if (!raceData.displayMessage) raceData.displayMessage = '';
+                    currentRaceNameDisplay.textContent = raceData.raceName || 'Race'; 
+                    if(displayMessageInput) displayMessageInput.value = raceData.displayMessage || '';
+                    if(currentTimingStage === null) {
+                        showStageSelection();
+                    }
+                    if(currentOfflineTimingStage === null) {
+                        showOfflineStageSelection();
+                    }
                     renderRaceData();
                     populateTimingDropdown();
+                    populateOfflineRiderDropdown();
+                    renderPendingTimers();
+                    syncOfflineTimers();
                 } else {
                     console.log("No such document! Creating a new one.");
-                    raceData = {
-                        riders: [],
-                        stages: raceData.stages,
-                        raceId: raceId
+                    raceData = { 
+                        riders: [], 
+                        stages: raceData.stages, 
+                        raceId: raceId, 
+                        raceName: newRaceName || 'Untitled Race',
+                        categories: [],
+                        displayMessage: ''
                     };
                     setDoc(raceDocRef, raceData);
                 }
@@ -186,6 +197,7 @@ const firebaseConfig = {
         
         const setupTimersListener = (raceId) => {
             if (timersUnsubscribe) timersUnsubscribe();
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
             const timersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'races', raceId, 'timers');
             timersUnsubscribe = onSnapshot(timersCollectionRef, (querySnapshot) => {
                 activeTimers = {};
@@ -197,30 +209,27 @@ const firebaseConfig = {
         };
 
         const renderActiveTimers = () => {
-            if (!activeTimersList) return;
+            if (!activeTimersList || currentTimingStage === null) return;
             activeTimersList.innerHTML = '';
-            const timerKeys = Object.keys(activeTimers);
+            
+            const stageTimers = Object.values(activeTimers).filter(timer => timer.stageIndex === currentTimingStage);
 
-            if (timerKeys.length === 0) {
-                activeTimersList.innerHTML = `<li class="text-sm text-gray-500">No active timers.</li>`;
+            if (stageTimers.length === 0) {
+                activeTimersList.innerHTML = `<li class="text-sm text-gray-500">No active timers for this stage.</li>`;
             } else {
-                timerKeys.forEach(key => {
-                    const timer = activeTimers[key];
+                stageTimers.forEach(timer => {
                     const elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
                     const timeString = formatTime(elapsed);
-                    
+                    const rider = raceData.riders.find(r => r.number === timer.riderNumber);
+                    const riderDetails = rider ? `(${rider.name}${rider.category ? ', ' + rider.category : ''})` : '';
                     const listItem = document.createElement('li');
                     listItem.className = "flex justify-between items-center p-2 bg-gray-100 rounded-md shadow-sm";
-                    
                     const textNode = document.createElement('span');
-                    textNode.textContent = `Rider #${timer.riderNumber} (Stage ${timer.stageIndex + 1}): ${timeString}`;
-                    
+                    textNode.textContent = `Rider #${timer.riderNumber} ${riderDetails} : ${timeString}`;
                     const stopButton = document.createElement('button');
                     stopButton.textContent = 'Stop';
                     stopButton.className = 'button px-3 py-1 bg-red-600 text-white text-sm font-bold rounded-md shadow-sm hover:bg-red-700';
-                    
                     stopButton.onclick = () => stopSpecificTimer(timer.riderNumber, timer.stageIndex);
-
                     listItem.appendChild(textNode);
                     listItem.appendChild(stopButton);
                     activeTimersList.appendChild(listItem);
@@ -228,67 +237,181 @@ const firebaseConfig = {
             }
         };
 
-        const stopSpecificTimer = async (riderNumber, stageIndex) => {
+        const stopSpecificTimer = async (riderNumber, stageIndex, finishTimestamp = null) => {
             const timerDocId = `${riderNumber}-${stageIndex}`;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
             const timerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId, 'timers', timerDocId);
 
             try {
                 const docSnap = await getDoc(timerDocRef);
                 if (docSnap.exists()) {
                     const timerData = docSnap.data();
-                    const elapsedSeconds = Math.floor((Date.now() - timerData.startTime) / 1000);
+                    const endTime = finishTimestamp || Date.now();
+                    const elapsedSeconds = Math.floor((endTime - timerData.startTime) / 1000);
+
+                    if (elapsedSeconds < 0) {
+                        showMessage(`Error for Rider #${riderNumber}: Finish time is before start time.`, true);
+                        if (finishTimestamp) {
+                           await deleteDoc(timerDocRef);
+                        }
+                        return;
+                    }
+
                     await updateTime(riderNumber, timerData.stageIndex, elapsedSeconds);
                     showMessage(`Time saved for Rider #${riderNumber}, Stage ${timerData.stageIndex + 1}`);
+                } else {
+                    if (!finishTimestamp) {
+                        showMessage(`No active timer found for Rider #${riderNumber} on Stage ${stageIndex + 1}.`, true);
+                    }
                 }
             } catch (error) {
                 console.error("Error stopping timer: ", error);
                 showMessage('Failed to stop timer.', true);
             } finally {
-                await deleteDoc(timerDocRef);
+                if ((await getDoc(timerDocRef)).exists()) {
+                     await deleteDoc(timerDocRef);
+                }
             }
         };
 
         const populateTimingDropdown = () => {
-            if (!timingRiderInput || !timingStageSelect) return;
-            timingRiderInput.innerHTML = '<option value="">Select Rider</option>';
+            if (!timingRiderInput) return;
+            const currentSelection = timingRiderInput.value;
+            timingRiderInput.innerHTML = '<option value="">Select Rider to Start</option>';
             raceData.riders.forEach(rider => {
                 const option = document.createElement('option');
                 option.value = rider.number;
-                option.textContent = `${rider.number} - ${rider.name}`;
+                const categoryText = rider.category ? ` (${rider.category})` : '';
+                option.textContent = `${rider.number} - ${rider.name}${categoryText}`;
                 timingRiderInput.appendChild(option);
             });
-
-            timingStageSelect.innerHTML = '<option value="">Select Stage</option>';
-            for (let i = 0; i < raceData.stages; i++) {
+            timingRiderInput.value = currentSelection;
+        };
+        
+        const populateOfflineRiderDropdown = () => {
+            if (!offlineRiderInput) return;
+            const currentSelection = offlineRiderInput.value;
+            offlineRiderInput.innerHTML = '<option value="">Select Rider...</option>';
+            raceData.riders.forEach(rider => {
                 const option = document.createElement('option');
-                option.value = i;
-                option.textContent = `Stage ${i + 1}`;
-                timingStageSelect.appendChild(option);
-            }
+                option.value = rider.number;
+                const categoryText = rider.category ? ` (${rider.category})` : '';
+                option.textContent = `${rider.number} - ${rider.name}${categoryText}`;
+                offlineRiderInput.appendChild(option);
+            });
+            offlineRiderInput.value = currentSelection;
         };
 
-        const loadRace = () => {
+        const populateCategoryDropdowns = () => {
+            if (!riderCategorySelect) return;
+            const currentSelection = riderCategorySelect.value;
+            riderCategorySelect.innerHTML = '<option value="">-- No Category --</option>';
+            raceData.categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                riderCategorySelect.appendChild(option);
+            });
+            riderCategorySelect.value = currentSelection;
+        };
+
+        const loadRace = (newRaceName = null, newStages = null) => {
             const raceId = raceIdInput.value.trim();
             if (!raceId) {
                 showMessage('Please enter a race ID.', true);
                 return;
             }
+            
+            if (newStages !== null) {
+                raceData.stages = newStages; 
+            }
+
             raceInfoDiv.classList.add('hidden');
             raceTimerContainer.classList.remove('hidden');
             document.getElementById('currentRaceIdDisplay').textContent = `Race ID: ${raceId}`;
-            setupRaceListener(raceId);
+            setupRaceListener(raceId, newRaceName);
         };
 
         const createNewRace = () => {
             const stages = parseInt(stageCountInput.value, 10);
+            const raceName = raceNameInput.value.trim() || 'Untitled Race';
+            
             if (isNaN(stages) || stages <= 0) {
                 showMessage('Please enter a valid number of stages.', true);
                 return;
             }
+
             const newRaceId = `race_${Date.now()}`;
-            raceData.stages = stages;
             raceIdInput.value = newRaceId;
-            loadRace();
+            loadRace(raceName, stages);
+        };
+
+        const addRidersBulk = async (newRiders) => {
+             if (!currentRaceId) return showMessage('Please create or load a race first.', true);
+
+             const updatedRiders = [...raceData.riders, ...newRiders];
+             const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+             const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+             await updateDoc(raceDocRef, { riders: updatedRiders });
+        };
+
+        const processCsvUpload = () => {
+            const file = riderCsvInput.files[0];
+            if (!file) {
+                return showMessage('Please select a CSV file to upload.', true);
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const csv = event.target.result;
+                const lines = csv.split(/\r\n|\n/);
+                const newRiders = [];
+                const existingNumbers = new Set(raceData.riders.map(r => r.number));
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    const parts = line.split(',');
+                    if (parts.length < 2) {
+                        showMessage(`Error on line ${i + 1}: Line must contain at least a number and a name.`, true);
+                        return;
+                    }
+                    const riderNumber = parseInt(parts[0], 10);
+                    const riderName = parts[1].trim();
+                    const riderCategory = (parts[2] || '').trim();
+                    if (isNaN(riderNumber) || !riderName) {
+                        showMessage(`Error on line ${i + 1}: Invalid rider number or name.`, true);
+                        return;
+                    }
+                    if (existingNumbers.has(riderNumber)) {
+                        showMessage(`Error on line ${i + 1}: Rider number ${riderNumber} already exists.`, true);
+                        return;
+                    }
+                    newRiders.push({
+                        number: riderNumber, name: riderName, category: riderCategory,
+                        times: Array(raceData.stages).fill(null), totalTime: null, status: 'active'
+                    });
+                    existingNumbers.add(riderNumber);
+                }
+
+                if (raceData.riders.length + newRiders.length > MAX_RIDERS) {
+                    return showMessage(`Cannot add ${newRiders.length} riders. The total would exceed the ${MAX_RIDERS} rider limit.`, true);
+                }
+
+                if (newRiders.length > 0) {
+                    try {
+                        await addRidersBulk(newRiders);
+                        showMessage(`Successfully added ${newRiders.length} riders.`);
+                        riderCsvInput.value = '';
+                    } catch (error) {
+                        showMessage('An error occurred during bulk upload.', true);
+                        console.error("Bulk upload error: ", error);
+                    }
+                } else {
+                    showMessage('No new riders found in the file.', true);
+                }
+            };
+            reader.readAsText(file);
         };
 
         const addRider = async (event) => {
@@ -297,44 +420,306 @@ const firebaseConfig = {
 
             const riderNumber = parseInt(document.getElementById('riderNumber').value, 10);
             const riderName = document.getElementById('riderName').value.trim();
+            const riderCategory = riderCategorySelect.value; 
 
-            if (raceData.riders.length >= 100) return showMessage('Maximum 100 riders.', true);
+            if (raceData.riders.length >= MAX_RIDERS) return showMessage(`Maximum ${MAX_RIDERS} riders.`, true);
             if (!riderNumber || !riderName) return showMessage('Please enter both rider number and name.', true);
             if (raceData.riders.some(r => r.number === riderNumber)) return showMessage('Rider number already exists.', true);
             
-            const newRider = {
-                number: riderNumber,
-                name: riderName,
-                times: Array(raceData.stages).fill(null),
-                totalTime: null
-            };
+            const newRider = { number: riderNumber, name: riderName, category: riderCategory, times: Array(raceData.stages).fill(null), totalTime: null, status: 'active' };
 
             const updatedRiders = [...raceData.riders, newRider];
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
             const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
             await updateDoc(raceDocRef, { riders: updatedRiders });
             
             riderForm.reset();
             showMessage('Rider added successfully!');
         };
+       
+        const removeRider = async (riderNumber) => {
+            if (!confirm(`Are you sure you want to remove rider #${riderNumber}? This cannot be undone.`)) return;
+
+            const updatedRiders = raceData.riders.filter(r => r.number !== riderNumber);
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            try {
+                await updateDoc(raceDocRef, { riders: updatedRiders });
+                showMessage(`Rider #${riderNumber} removed.`);
+            } catch (error) {
+                showMessage('Failed to remove rider.', true);
+                console.error("Error removing rider: ", error);
+            }
+        };
+
+        const editRider = async (riderNumber) => {
+            const riderIndex = raceData.riders.findIndex(r => r.number === riderNumber);
+            if (riderIndex === -1) return;
+            const rider = raceData.riders[riderIndex];
+
+            const newName = prompt("Enter new rider name:", rider.name);
+            if (newName === null) return; 
+
+            const categoryOptions = (raceData.categories && raceData.categories.length > 0) 
+                ? raceData.categories.join(', ') 
+                : 'No categories set';
+            const promptMessage = `Enter new rider category.\n\nAvailable options: [${categoryOptions}]`;
+            const newCategory = prompt(promptMessage, rider.category);
+            
+            if (newCategory === null) return; 
+
+            if (!newName.trim()) return showMessage('Name cannot be empty.', true);
+
+            let updatedRiders = JSON.parse(JSON.stringify(raceData.riders));
+            updatedRiders[riderIndex].name = newName.trim();
+            updatedRiders[riderIndex].category = newCategory.trim();
+            
+            const updatedCategories = new Set(raceData.categories || []);
+            if (newCategory.trim() && !updatedCategories.has(newCategory.trim())) {
+                updatedCategories.add(newCategory.trim());
+            }
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            try {
+                await updateDoc(raceDocRef, { 
+                    riders: updatedRiders,
+                    categories: Array.from(updatedCategories) 
+                });
+                showMessage(`Rider #${riderNumber} updated.`);
+            } catch (error) {
+                showMessage('Failed to update rider.', true);
+                console.error("Error updating rider: ", error);
+            }
+        };
         
-        const updateTime = async (riderNumber, stageIndex, seconds) => {
+        const editStageCount = async () => {
+            if (!currentRaceId) return;
+
+            const confirmation = prompt(
+                "DANGER: You are about to change the total number of stages. \n\n" +
+                "Reducing stages will PERMANENTLY delete times for removed stages. \n\n" +
+                "To proceed, type 'UPDATE STAGES'"
+            );
+            if (confirmation !== 'UPDATE STAGES') {
+                return showMessage('Action cancelled.', true);
+            }
+            
+            const newCountStr = prompt("Enter the NEW total number of stages:", raceData.stages);
+            const newStageCount = parseInt(newCountStr, 10);
+            
+            if (isNaN(newStageCount) || newStageCount <= 0 || newStageCount > 20) {
+                 return showMessage('Invalid number. Please enter a number between 1 and 20.', true);
+            }
+            
+            if (newStageCount === raceData.stages) {
+                return showMessage('No change in stage count.', true);
+            }
+            
+            const oldStageCount = raceData.stages;
+            
+            const updatedRiders = raceData.riders.map(rider => {
+                let newTimes;
+                if (newStageCount > oldStageCount) {
+                    const padding = Array(newStageCount - oldStageCount).fill(null);
+                    newTimes = [...rider.times, ...padding];
+                } else {
+                    newTimes = rider.times.slice(0, newStageCount);
+                }
+                
+                const hasDnfStage = newTimes.some(time => time === 'DNF');
+                let newTotalTime = null;
+                let newStatus = hasDnfStage ? 'DNF' : 'active';
+                
+                if (newStatus === 'active' && newTimes.every(time => typeof time === 'number')) {
+                    newTotalTime = newTimes.reduce((sum, time) => sum + time, 0);
+                } else if (newStatus === 'DNF') {
+                     newTotalTime = null;
+                }
+                
+                return {
+                    ...rider,
+                    times: newTimes,
+                    totalTime: newTotalTime,
+                    status: newStatus
+                };
+            });
+            
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            
+            try {
+                await updateDoc(raceDocRef, {
+                    stages: newStageCount,
+                    riders: updatedRiders
+                });
+                showMessage(`Race stages updated to ${newStageCount}.`);
+            } catch (error) {
+                showMessage('Failed to update stage count.', true);
+                console.error("Error updating stage count: ", error);
+            }
+        };
+        
+        const addCategory = async () => {
+            const newCategory = categoryNameInput.value.trim();
+            if (!newCategory) return showMessage('Please enter a category name.', true);
+            if (raceData.categories.some(c => c.toLowerCase() === newCategory.toLowerCase())) {
+                return showMessage('Category already exists.', true);
+            }
+            
+            const updatedCategories = [...raceData.categories, newCategory];
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            try {
+                await updateDoc(raceDocRef, { categories: updatedCategories });
+                showMessage('Category added!');
+                categoryNameInput.value = '';
+            } catch (error) {
+                showMessage('Failed to add category.', true);
+            }
+        };
+
+        const editCategory = async (oldCategory) => {
+            const newCategory = prompt(`Edit category name:`, oldCategory);
+            if (!newCategory || newCategory.trim() === '') return;
+            if (newCategory.trim().toLowerCase() === oldCategory.toLowerCase()) return;
+            
+            if (raceData.categories.some(c => c.toLowerCase() === newCategory.toLowerCase())) {
+                return showMessage('That category name already exists.', true);
+            }
+            
+            const updatedCategories = raceData.categories.map(c => c === oldCategory ? newCategory.trim() : c);
+            const updatedRiders = raceData.riders.map(r => {
+                if (r.category === oldCategory) {
+                    r.category = newCategory.trim();
+                }
+                return r;
+            });
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            try {
+                await updateDoc(raceDocRef, { categories: updatedCategories, riders: updatedRiders });
+                showMessage('Category updated successfully.');
+            } catch (error) {
+                showMessage('Failed to update category.', true);
+            }
+        };
+        
+        const deleteCategory = async (categoryToDelete) => {
+            if (!confirm(`Are you sure you want to delete the category "${categoryToDelete}"? This will remove it from all riders.`)) return;
+            
+            const updatedCategories = raceData.categories.filter(c => c !== categoryToDelete);
+            const updatedRiders = raceData.riders.map(r => {
+                if (r.category === categoryToDelete) {
+                    r.category = '';
+                }
+                return r;
+            });
+            
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            try {
+                await updateDoc(raceDocRef, { categories: updatedCategories, riders: updatedRiders });
+                showMessage('Category deleted.');
+            } catch (error) {
+                showMessage('Failed to delete category.', true);
+            }
+        };
+        
+        const updateDisplayMessage = async () => {
+            if (!currentRaceId) return showMessage('No race loaded.', true);
+            
+            const newMessage = displayMessageInput.value.trim();
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+            
+            try {
+                await updateDoc(raceDocRef, { displayMessage: newMessage });
+                showMessage('Display message updated!');
+            } catch (error) {
+                showMessage('Failed to update message.', true);
+                console.error("Error updating message: ", error);
+            }
+        };
+        
+        const renderCategories = () => {
+            if (!categoryListContainer) return;
+            categoryListContainer.innerHTML = '';
+            if (!raceData.categories || raceData.categories.length === 0) {
+                categoryListContainer.innerHTML = '<p class="text-sm text-gray-500">No categories defined yet.</p>';
+                return;
+            }
+            
+            raceData.categories.forEach(category => {
+                const pill = document.createElement('span');
+                pill.className = 'pill-button';
+                
+                const text = document.createElement('span');
+                text.textContent = category;
+                
+                const editBtn = document.createElement('button');
+                editBtn.innerHTML = '&#9998;'; 
+                editBtn.className = 'hover:text-yellow-500';
+                editBtn.onclick = () => editCategory(category);
+                
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '&times;'; 
+                delBtn.className = 'hover:text-red-500';
+                delBtn.onclick = () => deleteCategory(category);
+                
+                pill.appendChild(text);
+                pill.appendChild(editBtn);
+                pill.appendChild(delBtn);
+                categoryListContainer.appendChild(pill);
+            });
+        };
+
+        const setRiderDnf = async (riderNumber, stageIndexToSet) => {
             const riderIndex = raceData.riders.findIndex(r => r.number === riderNumber);
             if (riderIndex !== -1) {
                 let updatedRiders = JSON.parse(JSON.stringify(raceData.riders));
-                
+                updatedRiders[riderIndex].status = 'DNF';
+                updatedRiders[riderIndex].totalTime = null; 
+                if (typeof stageIndexToSet === 'number') updatedRiders[riderIndex].times[stageIndexToSet] = 'DNF';
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+                const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
+                await updateDoc(raceDocRef, { riders: updatedRiders });
+                showMessage(`Rider #${riderNumber} marked as DNF for Stage ${stageIndexToSet + 1}.`);
+            }
+        };
+
+        const updateTime = async (riderNumber, stageIndex, seconds) => {
+            const riderIndex = raceData.riders.findIndex(r => r.number === riderNumber);
+            if (riderIndex === -1) {
+                 console.warn(`Attempted to update time for non-existent rider #${riderNumber}`);
+                 return;
+            }
+            
+            let updatedRiders = JSON.parse(JSON.stringify(raceData.riders));
+            
+            if (stageIndex >= updatedRiders[riderIndex].times.length) {
+                const padding = Array(stageIndex - updatedRiders[riderIndex].times.length + 1).fill(null);
+                updatedRiders[riderIndex].times.push(...padding);
+            }
+
+            if (updatedRiders[riderIndex].times[stageIndex] === null) {
                 updatedRiders[riderIndex].times[stageIndex] = seconds;
-
-                const allStagesCompleted = updatedRiders[riderIndex].times.every(time => typeof time === 'number');
-
-                if (allStagesCompleted) {
-                    const total = updatedRiders[riderIndex].times.reduce((sum, time) => sum + (time || 0), 0);
-                    updatedRiders[riderIndex].totalTime = total;
+                const hasDnfStage = updatedRiders[riderIndex].times.some(time => time === 'DNF');
+                updatedRiders[riderIndex].status = hasDnfStage ? 'DNF' : 'active';
+                
+                if (updatedRiders[riderIndex].status === 'active' && updatedRiders[riderIndex].times.every(time => typeof time === 'number')) {
+                    updatedRiders[riderIndex].totalTime = updatedRiders[riderIndex].times.reduce((sum, time) => sum + time, 0);
                 } else {
                     updatedRiders[riderIndex].totalTime = null;
                 }
 
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
                 const raceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId);
                 await updateDoc(raceDocRef, { riders: updatedRiders });
+            } else {
+                 console.log(`Time for rider #${riderNumber}, stage ${stageIndex+1} already exists. Sync update skipped.`);
+                 showMessage(`Time for Rider #${riderNumber} already exists. Offline time not synced.`, true);
             }
         };
 
@@ -349,6 +734,7 @@ const firebaseConfig = {
         };
 
         const formatTime = (seconds) => {
+            if (seconds === 'DNF') return 'DNF';
             if (seconds === null || typeof seconds !== 'number') return 'N/A';
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
@@ -358,32 +744,37 @@ const firebaseConfig = {
         };
 
         const renderRaceData = () => {
+            if (!ridersTableBody || !resultsTableBody) return;
             ridersTableBody.innerHTML = '';
             resultsTableBody.innerHTML = '';
             
+            const categories = [...new Set(raceData.riders.map(r => r.category).filter(c => c))];
+            const categoryRankings = {};
+            categories.forEach(cat => {
+                categoryRankings[cat] = raceData.riders
+                    .filter(r => r.category === cat && r.totalTime !== null && r.status !== 'DNF')
+                    .sort((a, b) => a.totalTime - b.totalTime);
+            });
+
             raceData.riders.forEach((rider) => {
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
-                
-                row.innerHTML = `
-                    <td class="px-4 py-2 font-bold text-gray-700">${rider.number}</td>
-                    <td class="px-4 py-2 text-gray-600">${rider.name}</td>
-                `;
+                row.innerHTML = `<td class="font-bold text-gray-700">${rider.number}</td><td>${rider.name}</td><td class="text-gray-500">${rider.category || ''}</td>`;
                 
                 for (let i = 0; i < raceData.stages; i++) {
                     const timeCell = document.createElement('td');
-                    timeCell.className = 'px-4 py-2 text-gray-800 cursor-pointer hover:bg-yellow-200';
+                    timeCell.className = 'text-gray-800 cursor-pointer hover:bg-yellow-200';
                     timeCell.textContent = formatTime(rider.times[i]);
+                    if (rider.times[i] === 'DNF') timeCell.classList.add('text-red-600', 'font-semibold');
+
                     timeCell.addEventListener('click', () => {
-                        const newTimeStr = prompt(`Enter new time for ${rider.name} - Stage ${i + 1} (e.g., 00:05:30 or 5:30):`, formatTime(rider.times[i]));
+                        const newTimeStr = prompt(`Enter new time for ${rider.name} - Stage ${i + 1} (e.g., 5:30 or DNF):`, formatTime(rider.times[i]));
                         if (newTimeStr !== null) {
-                            const newTimeInSeconds = parseTimeToSeconds(newTimeStr);
-                            if (newTimeInSeconds !== null) {
-                                updateTime(rider.number, i, newTimeInSeconds);
-                            } else if (newTimeStr.trim() === '' || newTimeStr.toLowerCase() === 'n/a') {
-                                updateTime(rider.number, i, null);
-                            } else {
-                                showMessage('Invalid time format.', true);
+                            if (newTimeStr.trim().toUpperCase() === 'DNF') setRiderDnf(rider.number, i);
+                            else {
+                                const newTimeInSeconds = parseTimeToSeconds(newTimeStr);
+                                if (newTimeInSeconds !== null) updateTime(rider.number, i, newTimeInSeconds);
+                                else if (newTimeStr.trim() === '' || newTimeStr.toLowerCase() === 'n/a') updateTime(rider.number, i, null);
+                                else showMessage('Invalid format. Enter time (e.g., 5:30) or DNF.', true);
                             }
                         }
                     });
@@ -391,244 +782,641 @@ const firebaseConfig = {
                 }
                 
                 const totalCell = document.createElement('td');
-                totalCell.className = 'px-4 py-2 font-semibold text-gray-800';
-                totalCell.textContent = formatTime(rider.totalTime);
+                totalCell.className = 'font-semibold text-gray-800';
+                totalCell.textContent = rider.status === 'DNF' ? 'DNF' : formatTime(rider.totalTime);
                 row.appendChild(totalCell);
                 
+                const actionsCell = document.createElement('td');
+                actionsCell.className = 'text-center';
+                actionsCell.innerHTML = `<button class="edit-rider-btn button px-2 py-1 bg-yellow-500 text-white text-xs font-bold rounded shadow-sm hover:bg-yellow-600" data-rider-number="${rider.number}">Edit</button><button class="remove-rider-btn button px-2 py-1 bg-red-600 text-white text-xs font-bold rounded shadow-sm hover:bg-red-700 ml-1" data-rider-number="${rider.number}">Del</button>`;
+                row.appendChild(actionsCell);
                 ridersTableBody.appendChild(row);
             });
             
-            const sortedRiders = [...raceData.riders]
-                .filter(rider => rider.totalTime !== null)
-                .sort((a, b) => a.totalTime - b.totalTime);
+            const getProvisionalData = (rider) => {
+                const completedTimes = rider.times.filter(t => typeof t === 'number');
+                return { stagesCompleted: completedTimes.length, provisionalTime: completedTimes.reduce((a, b) => a + b, 0) };
+            };
 
-            const incompleteRiders = raceData.riders.filter(rider => rider.totalTime === null);
+            const finishedRiders = raceData.riders.filter(r => r.totalTime !== null && r.status !== 'DNF').sort((a, b) => a.totalTime - b.totalTime);
+            const incompleteRiders = raceData.riders.filter(r => r.totalTime === null && r.status !== 'DNF').sort((a, b) => getProvisionalData(b).stagesCompleted - getProvisionalData(a).stagesCompleted || getProvisionalData(a).provisionalTime - getProvisionalData(b).provisionalTime);
+            const dnfRiders = raceData.riders.filter(r => r.status === 'DNF');
+            const allRidersRanked = [...finishedRiders, ...incompleteRiders, ...dnfRiders];
 
-            [...sortedRiders, ...incompleteRiders].forEach((rider) => {
+            allRidersRanked.forEach((rider) => {
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
-                row.innerHTML = `
-                    <td class="px-4 py-2 text-center font-bold text-lg">${rider.totalTime !== null ? sortedRiders.findIndex(r => r.number === rider.number) + 1 : 'N/A'}</td>
-                    <td class="px-4 py-2 text-gray-700">${rider.number}</td>
-                    <td class="px-4 py-2 text-gray-600">${rider.name}</td>
-                    <td class="px-4 py-2 font-semibold text-gray-800">${formatTime(rider.totalTime)}</td>
-                `;
+                let rank, totalTimeDisplay, categoryRank = 'N/A';
+                if (rider.status === 'DNF') {
+                    rank = 'DNF'; totalTimeDisplay = 'DNF'; row.classList.add('text-red-600', 'opacity-75');
+                } else {
+                    rank = [...finishedRiders, ...incompleteRiders].findIndex(r => r.number === rider.number) + 1;
+                    if (rider.totalTime !== null) {
+                        totalTimeDisplay = formatTime(rider.totalTime);
+                        if (rider.category && categoryRankings[rider.category]) {
+                            const rankIndex = categoryRankings[rider.category].findIndex(r => r.number === rider.number);
+                            if(rankIndex !== -1) categoryRank = rankIndex + 1;
+                        }
+                    } else {
+                        const provisionalData = getProvisionalData(rider);
+                        const timePart = provisionalData.stagesCompleted > 0 ? formatTime(provisionalData.provisionalTime) : 'N/A';
+                        totalTimeDisplay = `${timePart} (${provisionalData.stagesCompleted}/${raceData.stages})`;
+                    }
+                }
+                row.innerHTML = `<td class="text-center font-bold text-lg">${rank}</td><td class="text-center font-semibold text-md">${categoryRank}</td><td>${rider.number}</td><td>${rider.name}</td><td class="text-gray-500">${rider.category || ''}</td><td class="font-semibold">${totalTimeDisplay}</td>`;
                 resultsTableBody.appendChild(row);
             });
             
-            riderCountDisplay.textContent = `Riders: ${raceData.riders.length}/100`;
+            riderCountDisplay.textContent = `Riders: ${raceData.riders.length}/${MAX_RIDERS}`;
             renderStageHeaders();
+            renderStageSpecificResults();
+            renderCategories(); 
+            populateCategoryDropdowns();
+            populateOfflineRiderDropdown();
         };
 
         const renderStageHeaders = () => {
+            if(!ridersTableBody || !ridersTableBody.parentNode) return;
             const ridersTableHeader = ridersTableBody.parentNode.querySelector('thead tr');
-            ridersTableHeader.innerHTML = `
-                <th class="px-4 py-3">Rider #</th>
-                <th class="px-4 py-3">Name</th>
-                ${Array.from({ length: raceData.stages }, (_, i) => `<th class="px-4 py-3">Stage ${i + 1}</th>`).join('')}
-                <th class="px-4 py-3">Total Time</th>
-            `;
+            if(!ridersTableHeader) return;
+            ridersTableHeader.innerHTML = `<th class="px-4 py-3">Rider #</th><th class="px-4 py-3">Name</th><th class="px-4 py-3">Category</th>${Array.from({ length: raceData.stages }, (_, i) => `<th class="px-4 py-3">Stage ${i + 1}</th>`).join('')}<th class="px-4 py-3">Total Time</th><th class="px-4 py-3">Actions</th>`;
+        };
+        
+        const renderStageSpecificResults = () => {
+            if (currentTimingStage === null || !stageStandingsBody) return;
+            stageStandingsBody.innerHTML = '';
+
+            const stageIndex = currentTimingStage;
+            const ridersWithStageTime = raceData.riders.filter(r => typeof r.times[stageIndex] === 'number' && r.status !== 'DNF').sort((a, b) => a.times[stageIndex] - b.times[stageIndex]);
+            const otherRiders = raceData.riders.filter(r => typeof r.times[stageIndex] !== 'number' || r.status === 'DNF');
+
+            [...ridersWithStageTime, ...otherRiders].forEach((rider, index) => {
+               const row = document.createElement('tr');
+               const rank = (index < ridersWithStageTime.length) ? index + 1 : 'N/A';
+               const time = formatTime(rider.times[stageIndex]);
+               if(rider.status === 'DNF' || rider.times[stageIndex] === 'DNF') row.classList.add('text-red-600', 'opacity-75');
+               row.innerHTML = `<td class="px-2 py-2 text-center font-bold">${rank}</td><td class="px-2 py-2">${rider.number}</td><td class="px-2 py-2">${rider.name}</td><td class="px-2 py-2 font-semibold">${time}</td>`;
+               stageStandingsBody.appendChild(row);
+            });
         };
 
         const startTimer = async () => {
-            if (!currentRaceId) return showMessage('Please create or load a race first.', true);
-            
+            if (!currentRaceId || currentTimingStage === null) return showMessage('Please select a stage first.', true);
             const riderNumber = timingRiderInput.value;
-            const stageIndex = timingStageSelect.value;
-            
-            if (!riderNumber || stageIndex === '') return showMessage('Please select a rider and stage to start.', true);
-
-            const timerDocId = `${riderNumber}-${stageIndex}`;
+            if (!riderNumber) return showMessage('Please select a rider to start.', true);
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            const timerDocId = `${riderNumber}-${currentTimingStage}`;
             const timerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId, 'timers', timerDocId);
 
             const existingTimer = await getDoc(timerDocRef);
-            if (existingTimer.exists()) {
-                return showMessage(`Timer is already active for Rider #${riderNumber}, Stage ${parseInt(stageIndex, 10) + 1}.`, true);
-            }
+            if (existingTimer.exists()) return showMessage(`Timer is already active for Rider #${riderNumber} on this stage.`, true);
             
             try {
-                await setDoc(timerDocRef, {
-                    riderNumber: parseInt(riderNumber, 10),
-                    stageIndex: parseInt(stageIndex, 10),
-                    startTime: Date.now()
-                });
-                showMessage(`Timer started for Rider #${riderNumber}, Stage ${parseInt(stageIndex, 10) + 1}`);
+                await setDoc(timerDocRef, { riderNumber: parseInt(riderNumber, 10), stageIndex: currentTimingStage, startTime: Date.now() });
+                showMessage(`Timer started for Rider #${riderNumber} on Stage ${currentTimingStage + 1}`);
             } catch (error) {
                 console.error("Error starting timer: ", error);
                 showMessage('Failed to start timer. Please try again.', true);
             }
         };
 
-        const exportResultsToCsv = () => {
-            if (!raceData || raceData.riders.length === 0) {
-                showMessage('No results to export.', true);
+        const showStageSelection = () => {
+            if (!timingStationSelect) return;
+            timingStationSelect.innerHTML = '<option value="">Select Stage</option>';
+            if (raceData && raceData.stages) {
+                for (let i = 0; i < raceData.stages; i++) {
+                    const option = document.createElement('option');
+                    option.value = i; option.textContent = `Stage ${i + 1}`;
+                    timingStationSelect.appendChild(option);
+                }
+            }
+            stageSelectionContainer.classList.remove('hidden');
+            timingStationActive.classList.add('hidden');
+        };
+
+        const startTimingForStage = () => {
+            const selectedStage = parseInt(timingStationSelect.value, 10);
+            if (isNaN(selectedStage) || selectedStage < 0) return showMessage('Please select a valid stage.', true);
+            currentTimingStage = selectedStage;
+            stageSelectionContainer.classList.add('hidden');
+            timingStationActive.classList.remove('hidden');
+            timingStationHeader.textContent = `Live Timing for Stage ${currentTimingStage + 1}`;
+            stageStandingsHeader.textContent = `Stage ${currentTimingStage + 1} Standings`;
+            renderActiveTimers();
+            renderRaceData();
+        };
+
+        const switchTimingStage = () => {
+            currentTimingStage = null;
+            if(stageStandingsBody) stageStandingsBody.innerHTML = '';
+            showStageSelection();
+        };
+        
+        const showOfflineStageSelection = () => {
+            if (!offlineTimingStationSelect) return;
+            offlineTimingStationSelect.innerHTML = '<option value="">Select Stage</option>';
+            if (raceData && raceData.stages) {
+                for (let i = 0; i < raceData.stages; i++) {
+                    const option = document.createElement('option');
+                    option.value = i; option.textContent = `Stage ${i + 1}`;
+                    offlineTimingStationSelect.appendChild(option);
+                }
+            }
+            offlineStageSelectionContainer.classList.remove('hidden');
+            offlineTimingStationActive.classList.add('hidden');
+        };
+
+        const startOfflineTimingForStage = () => {
+            const selectedStage = parseInt(offlineTimingStationSelect.value, 10);
+            if (isNaN(selectedStage) || selectedStage < 0) return showMessage('Please select a valid stage.', true);
+            currentOfflineTimingStage = selectedStage;
+            offlineStageSelectionContainer.classList.add('hidden');
+            offlineTimingStationActive.classList.remove('hidden');
+            offlineTimingStationHeader.textContent = `Offline Timing for Stage ${currentOfflineTimingStage + 1}`;
+            renderPendingTimers();
+        };
+        
+        const switchOfflineTimingStage = () => {
+            currentOfflineTimingStage = null;
+            if(pendingSyncList) pendingSyncList.innerHTML = '';
+            showOfflineStageSelection();
+        };
+
+        const recordOfflineTime = (event) => {
+            const type = event.target.id === 'offlineStartBtn' ? 'start' : 'finish';
+            if (!currentRaceId || currentOfflineTimingStage === null) return showMessage('Please select an offline stage first.', true);
+            
+            const riderNumber = offlineRiderInput.value;
+            if (!riderNumber) return showMessage('Please select a rider.', true);
+            
+            const logEntry = { 
+                raceId: currentRaceId, 
+                riderNumber: parseInt(riderNumber, 10), 
+                stageIndex: currentOfflineTimingStage, 
+                type: type, 
+                timestamp: Date.now() 
+            };
+            
+            try {
+                const logs = getPendingTimers();
+                logs.push(logEntry);
+                savePendingTimers(logs);
+                showMessage(`Offline ${type.toUpperCase()} recorded for Rider #${riderNumber}.`);
+                renderPendingTimers();
+            } catch (error) {
+                console.error("Error saving to localStorage: ", error);
+                showMessage('Failed to save offline time. Storage might be full.', true);
+            }
+        };
+
+        const renderPendingTimers = () => {
+            if (!pendingSyncList) return;
+            pendingSyncList.innerHTML = '';
+            
+            const logs = getPendingTimers().filter(log => log.raceId === currentRaceId);
+
+            if (logs.length === 0) {
+                pendingSyncList.innerHTML = `<li class="text-sm text-gray-500">No pending offline times to sync.</li>`;
                 return;
             }
 
-            const sortedRiders = [...raceData.riders]
-                .filter(rider => rider.totalTime !== null)
-                .sort((a, b) => a.totalTime - b.totalTime);
-            const incompleteRiders = raceData.riders.filter(rider => rider.totalTime === null);
-            const allRidersRanked = [...sortedRiders, ...incompleteRiders];
+            logs.forEach(log => {
+                const rider = raceData.riders.find(r => r.number === log.riderNumber);
+                const riderName = rider ? `(${rider.name})` : '';
+                const timeString = new Date(log.timestamp).toLocaleTimeString();
 
-            const headers = ["Rank", "Rider #", "Name", "Total Time"];
-            for (let i = 0; i < raceData.stages; i++) {
-                headers.push(`Stage ${i + 1}`);
+                const listItem = document.createElement('li');
+                listItem.className = "flex justify-between items-center p-2 bg-gray-100 rounded-md shadow-sm text-sm";
+                listItem.textContent = `Rider #${log.riderNumber} ${riderName} - Stage ${log.stageIndex + 1} - ${log.type.toUpperCase()} @ ${timeString}`;
+                pendingSyncList.appendChild(listItem);
+            });
+        };
+
+        const syncOfflineTimers = async () => {
+            if (!authReady || !currentRaceId) return;
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+            let allLogs = getPendingTimers();
+            let raceLogs = allLogs.filter(log => log.raceId === currentRaceId);
+            let otherLogs = allLogs.filter(log => log.raceId !== currentRaceId);
+            
+            if (raceLogs.length === 0) return;
+
+            showMessage(`Syncing ${raceLogs.length} offline time(s)...`);
+
+            let processedLogTimestamps = new Set();
+
+            for (const log of raceLogs) {
+                try {
+                    const timerDocId = `${log.riderNumber}-${log.stageIndex}`;
+                    const timerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', currentRaceId, 'timers', timerDocId);
+
+                    if (log.type === 'start') {
+                        const existingTimer = await getDoc(timerDocRef);
+                        if (!existingTimer.exists()) {
+                            await setDoc(timerDocRef, { 
+                                riderNumber: log.riderNumber, 
+                                stageIndex: log.stageIndex, 
+                                startTime: log.timestamp 
+                            });
+                            console.log(`Synced offline START for Rider #${log.riderNumber}`);
+                        } else {
+                            console.log(`Online START already exists for Rider #${log.riderNumber}, offline start ignored.`);
+                        }
+                        processedLogTimestamps.add(log.timestamp);
+
+                    } else if (log.type === 'finish') {
+                        const existingTimer = await getDoc(timerDocRef);
+                        if (existingTimer.exists()) {
+                            await stopSpecificTimer(log.riderNumber, log.stageIndex, log.timestamp);
+                            console.log(`Synced offline FINISH for Rider #${log.riderNumber}`);
+                        } else {
+                            console.log(`No online START found for Rider #${log.riderNumber}, offline finish ignored.`);
+                        }
+                        if (existingTimer.exists()) {
+                            processedLogTimestamps.add(log.timestamp);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error during sync of one item: ", error);
+                    showMessage(`Error syncing log for Rider #${log.riderNumber}.`, true);
+                }
             }
-            let csvContent = headers.join(",") + "\r\n";
 
+            const unprocessedRaceLogs = raceLogs.filter(log => !processedLogTimestamps.has(log.timestamp));
+            savePendingTimers([...otherLogs, ...unprocessedRaceLogs]);
+            
+            renderPendingTimers();
+            if(unprocessedRaceLogs.length === 0 && raceLogs.length > 0) {
+                 showMessage('Offline sync complete!', false);
+            }
+        };
+
+        const exportResultsToCsv = () => {
+            if (!raceData || raceData.riders.length === 0) return showMessage('No results to export.', true);
+            const getProvisionalData = (rider) => {
+                const completedTimes = rider.times.filter(t => typeof t === 'number');
+                return { stagesCompleted: completedTimes.length, provisionalTime: completedTimes.reduce((a, b) => a + b, 0) };
+            };
+            const finishedRiders = [...raceData.riders].filter(r => r.totalTime !== null && r.status !== 'DNF').sort((a, b) => a.totalTime - b.totalTime);
+            const categories = [...new Set(raceData.riders.map(r => r.category).filter(c => c))];
+            const categoryRankings = {};
+            categories.forEach(cat => { categoryRankings[cat] = raceData.riders.filter(r => r.category === cat && r.totalTime !== null && r.status !== 'DNF').sort((a, b) => a.totalTime - b.totalTime); });
+            const incompleteRiders = raceData.riders.filter(r => r.totalTime === null && r.status !== 'DNF').sort((a, b) => getProvisionalData(b).stagesCompleted - getProvisionalData(a).stagesCompleted || getProvisionalData(a).provisionalTime - getProvisionalData(b).provisionalTime);
+            const dnfRiders = raceData.riders.filter(r => r.status === 'DNF');
+            const allRidersRanked = [...finishedRiders, ...incompleteRiders, ...dnfRiders];
+            const headers = ["Overall Rank", "Category Rank", "Rider #", "Name", "Category", "Total Time / Provisional Time", ...Array.from({ length: raceData.stages }, (_, i) => `Stage ${i + 1}`)];
+            let csvContent = headers.join(",") + "\r\n";
             allRidersRanked.forEach((rider) => {
-                const rank = rider.totalTime !== null ? sortedRiders.findIndex(r => r.number === rider.number) + 1 : 'N/A';
-                const name = `"${rider.name.replace(/"/g, '""')}"`; // Quote names and escape double quotes
-                const totalTime = formatTime(rider.totalTime);
-                const rowData = [rank, rider.number, name, totalTime];
-                rider.times.forEach(time => {
-                    rowData.push(formatTime(time));
-                });
+                let rank, totalTime, categoryRank = 'N/A';
+                if (rider.status === 'DNF') { rank = 'DNF'; totalTime = 'DNF'; } 
+                else {
+                    rank = [...finishedRiders, ...incompleteRiders].findIndex(r => r.number === rider.number) + 1;
+                       if (rider.totalTime !== null) {
+                            totalTime = formatTime(rider.totalTime);
+                            if (rider.category && categoryRankings[rider.category]) {
+                                const rankIndex = categoryRankings[rider.category].findIndex(r => r.number === rider.number);
+                                if(rankIndex !== -1) categoryRank = rankIndex + 1;
+                            }
+                        } else {
+                            const provisionalData = getProvisionalData(rider);
+                            const timePart = provisionalData.stagesCompleted > 0 ? formatTime(provisionalData.provisionalTime) : 'N/A';
+                            totalTime = `${timePart} (${provisionalData.stagesCompleted}/${raceData.stages})`;
+                        }
+                }
+                const name = `"${rider.name.replace(/"/g, '""')}"`;
+                const category = `"${(rider.category || '').replace(/"/g, '""')}"`;
+                const rowData = [rank, categoryRank, rider.number, name, category, totalTime, ...rider.times.map(time => formatTime(time))];
                 csvContent += rowData.join(",") + "\r\n";
             });
-
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
             link.setAttribute("download", `race_results_${currentRaceId || 'export'}.csv`);
-            link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         };
+        
+        const setupTabs = () => {
+            tabButtons = document.querySelectorAll('.tab-button');
+            tabContents = document.querySelectorAll('.tab-content');
 
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+
+                    tabContents.forEach(content => content.classList.add('hidden'));
+                    document.getElementById(button.dataset.tab).classList.remove('hidden');
+                });
+            });
+        };
+
+        const toggleAdminView = () => {
+            const isAdminVisible = !document.getElementById('timingTabButton').classList.contains('hidden');
+            if (isAdminVisible) {
+                ['timingTabButton', 'ridersTabButton', 'dataTabButton', 'setupTabButton', 'offlineTabButton'].forEach(id => document.getElementById(id).classList.add('hidden'));
+                document.getElementById('dashboardTabButton').click();
+                toggleViewBtn.textContent = 'Show Admin Controls';
+                toggleViewBtn.classList.replace('bg-purple-600', 'bg-gray-600');
+                toggleViewBtn.classList.replace('hover:bg-purple-700', 'hover:bg-gray-700');
+            } else {
+                ['timingTabButton', 'ridersTabButton', 'dataTabButton', 'setupTabButton', 'offlineTabButton'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+                toggleViewBtn.textContent = 'Results Only View';
+                toggleViewBtn.classList.replace('bg-gray-600', 'bg-purple-600');
+                toggleViewBtn.classList.replace('hover:bg-gray-700', 'hover:bg-purple-700');
+            }
+        };
+        
         window.addEventListener('DOMContentLoaded', () => {
-            raceIdInput = document.getElementById('raceIdInput');
-            loadRaceBtn = document.getElementById('loadRaceBtn');
-            newRaceBtn = document.getElementById('newRaceBtn');
-            raceInfoDiv = document.getElementById('raceInfo');
-            raceTimerContainer = document.getElementById('raceTimerContainer');
-            riderForm = document.getElementById('riderForm');
-            ridersTableBody = document.getElementById('ridersTableBody');
-            resultsTableBody = document.getElementById('resultsTableBody');
-            riderCountDisplay = document.getElementById('riderCountDisplay');
-            startTimerBtn = document.getElementById('startTimerBtn');
-            timingRiderInput = document.getElementById('timingRiderInput');
-            timingStageSelect = document.getElementById('timingStageSelect');
-            messageBox = document.getElementById('messageBox');
-            activeTimersList = document.getElementById('activeTimersList');
-            stageCountInput = document.getElementById('stageCountInput');
-            exportCsvBtn = document.getElementById('exportCsvBtn');
+            raceIdInput = document.getElementById('raceIdInput'); loadRaceBtn = document.getElementById('loadRaceBtn'); newRaceBtn = document.getElementById('newRaceBtn'); raceInfoDiv = document.getElementById('raceInfo'); raceTimerContainer = document.getElementById('raceTimerContainer'); riderForm = document.getElementById('riderForm'); ridersTableBody = document.getElementById('ridersTableBody'); resultsTableBody = document.getElementById('resultsTableBody'); riderCountDisplay = document.getElementById('riderCountDisplay'); startTimerBtn = document.getElementById('startTimerBtn'); timingRiderInput = document.getElementById('timingRiderInput'); messageBox = document.getElementById('messageBox'); activeTimersList = document.getElementById('activeTimersList'); stageCountInput = document.getElementById('stageCountInput'); exportCsvBtn = document.getElementById('exportCsvBtn'); stageSelectionContainer = document.getElementById('stageSelectionContainer'); timingStationSelect = document.getElementById('timingStationSelect'); startTimingStationBtn = document.getElementById('startTimingStationBtn'); timingStationActive = document.getElementById('timingStationActive'); timingStationHeader = document.getElementById('timingStationHeader'); switchStageBtn = document.getElementById('switchStageBtn'); stageStandingsHeader = document.getElementById('stageStandingsHeader'); stageStandingsBody = document.getElementById('stageStandingsBody'); riderCsvInput = document.getElementById('riderCsvInput'); processCsvBtn = document.getElementById('processCsvBtn'); toggleViewBtn = document.getElementById('toggleViewBtn');
+            raceNameInput = document.getElementById('raceNameInput');
+            currentRaceNameDisplay = document.getElementById('currentRaceNameDisplay');
+            categoryNameInput = document.getElementById('categoryNameInput');
+            addCategoryBtn = document.getElementById('addCategoryBtn');
+            categoryListContainer = document.getElementById('categoryListContainer');
+            riderCategorySelect = document.getElementById('riderCategorySelect');
+            editStageCountBtn = document.getElementById('editStageCountBtn');
+            displayMessageInput = document.getElementById('displayMessageInput');
+            updateDisplayMessageBtn = document.getElementById('updateDisplayMessageBtn');
             
+            offlineStageSelectionContainer = document.getElementById('offlineStageSelectionContainer');
+            offlineTimingStationSelect = document.getElementById('offlineTimingStationSelect');
+            startOfflineTimingBtn = document.getElementById('startOfflineTimingBtn');
+            offlineTimingStationActive = document.getElementById('offlineTimingStationActive');
+            offlineTimingStationHeader = document.getElementById('offlineTimingStationHeader');
+            switchOfflineStageBtn = document.getElementById('switchOfflineStageBtn');
+            offlineRiderInput = document.getElementById('offlineRiderInput');
+            offlineStartBtn = document.getElementById('offlineStartBtn');
+            offlineFinishBtn = document.getElementById('offlineFinishBtn');
+            pendingSyncList = document.getElementById('pendingSyncList');
+            manualSyncBtn = document.getElementById('manualSyncBtn');
+
             stageCountInput.value = 6;
             
-            loadRaceBtn.addEventListener('click', loadRace);
+            const manualFirebaseConfig = {
+                apiKey: "AIzaSyCrKQpx3rZN2Y0Asy8HL08kv89eVQhoDck",
+                authDomain: "race-timer-6b61e.firebaseapp.com",
+                projectId: "race-timer-6b61e",
+                storageBucket: "race-timer-6b61e.firebasestorage.app",
+                messagingSenderId: "933028970429",
+                appId: "1:933028970429:web:2c3a5a02c2d6682bde5cd4",
+                measurementId: "G-D54Y5VYDT6"
+            };
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : manualFirebaseConfig;
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'enduro-timer-default';
+
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app); auth = getAuth(app);
+                onAuthStateChanged(auth, async (user) => {
+                    if (!user) {
+                        if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                        else await signInAnonymously(auth);
+                    }
+                    if (auth.currentUser) {
+                        userId = auth.currentUser.uid;
+                        const userIdDisplay = document.getElementById('userIdDisplay');
+                        const appIdDisplay = document.getElementById('appIdDisplay');
+                        if (userIdDisplay) userIdDisplay.textContent = `User ID: ${auth.currentUser.isAnonymous ? '(Anon) ' : ''}${userId}`;
+                        if (appIdDisplay) appIdDisplay.textContent = `App ID: ${appId}`;
+                    }
+                    authReady = true;
+                    syncOfflineTimers(); 
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                const userIdDisplay = document.getElementById('userIdDisplay');
+                if(userIdDisplay) userIdDisplay.textContent = 'Firebase connection failed. Check config.';
+                showMessage('Firebase connection failed. Please check your configuration details.', true);
+            }
+            
+            setupTabs();
+            loadRaceBtn.addEventListener('click', () => loadRace()); 
             newRaceBtn.addEventListener('click', createNewRace);
             riderForm.addEventListener('submit', addRider);
             startTimerBtn.addEventListener('click', startTimer);
             exportCsvBtn.addEventListener('click', exportResultsToCsv);
+            startTimingStationBtn.addEventListener('click', startTimingForStage);
+            switchStageBtn.addEventListener('click', switchTimingStage);
+            processCsvBtn.addEventListener('click', processCsvUpload);
+            toggleViewBtn.addEventListener('click', toggleAdminView);
+            addCategoryBtn.addEventListener('click', addCategory); 
+            editStageCountBtn.addEventListener('click', editStageCount);
+            updateDisplayMessageBtn.addEventListener('click', updateDisplayMessage);
+
+            startOfflineTimingBtn.addEventListener('click', startOfflineTimingForStage);
+            switchOfflineStageBtn.addEventListener('click', switchOfflineTimingStage);
+            offlineStartBtn.addEventListener('click', recordOfflineTime);
+            offlineFinishBtn.addEventListener('click', recordOfflineTime);
+            manualSyncBtn.addEventListener('click', syncOfflineTimers);
+
+            ridersTableBody.addEventListener('click', (event) => {
+                const target = event.target.closest('button');
+                if (!target) return;
+                if (target.classList.contains('edit-rider-btn')) editRider(parseInt(target.dataset.riderNumber, 10));
+                else if (target.classList.contains('remove-rider-btn')) removeRider(parseInt(target.dataset.riderNumber, 10));
+            });
         });
     </script>
 
-    <!-- UI -->
-    <div class="container mx-auto p-4 flex flex-col items-center">
+    <div class="container mx-auto p-4 flex flex-col items-center w-full">
         <header class="header-bg text-white w-full p-6 sm:p-8 rounded-xl text-center shadow-lg mb-8">
             <h1 class="text-3xl sm:text-4xl font-extrabold mb-2">Enduro Race Timer</h1>
             <p class="text-sm sm:text-base text-gray-200">Real-time, collaborative race timing for enduro events.</p>
         </header>
 
-        <div class="w-full max-w-6xl p-4 sm:p-6 mb-8 bg-white rounded-xl shadow-lg border border-gray-200">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 text-gray-600 font-medium">
-                <span id="userIdDisplay" class="mb-2 sm:mb-0 text-xs sm:text-sm">User ID: Loading...</span>
-                <span id="appIdDisplay" class="text-xs sm:text-sm">App ID: Loading...</span>
-            </div>
-            <div id="raceInfo" class="space-y-4">
-                <p class="text-center text-gray-700 font-medium text-lg">Create a new race or join an existing one.</p>
-                 <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 items-center">
-                    <label for="stageCountInput" class="text-gray-700 font-medium whitespace-nowrap">Number of Stages:</label>
-                    <input type="number" id="stageCountInput" value="6" min="1" max="20"
-                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <div id="raceInfo" class="w-full max-w-2xl">
+            <div class="card space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center text-gray-600 font-medium">
+                    <span id="userIdDisplay" class="mb-2 sm:mb-0 text-xs">User ID: Loading...</span>
+                    <span id="appIdDisplay" class="text-xs">App ID: Loading...</span>
                 </div>
+                <p class="text-center text-gray-700 font-medium text-lg">Create a new race or join an existing one.</p>
+                
+                <div class="mb-2">
+                    <label for="raceNameInput" class="block text-sm font-medium text-gray-700 mb-1">New Race Name (Optional)</label>
+                    <input type="text" id="raceNameInput" placeholder="e.g., Mountain Mayhem 2025" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="mb-4">
+                      <label for="stageCountInput" class="block text-sm font-medium text-gray-700 mb-1">Number of Stages</label>
+                      <input type="number" id="stageCountInput" value="6" min="1" max="20" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                
                 <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                    <input type="text" id="raceIdInput" placeholder="Enter Race ID to join (e.g., race_12345)"
-                           class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <input type="text" id="raceIdInput" placeholder="Enter Race ID to join (e.g., race_12345)" class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <button id="loadRaceBtn" class="button w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white font-bold rounded-md shadow-md hover:bg-indigo-700">Load Race</button>
                     <button id="newRaceBtn" class="button w-full sm:w-auto px-6 py-2 bg-gray-600 text-white font-bold rounded-md shadow-md hover:bg-gray-700">New Race</button>
                 </div>
             </div>
-            <div id="raceTimerContainer" class="hidden">
-                <p class="text-center font-bold text-xl text-gray-800 mb-4" id="currentRaceIdDisplay"></p>
-                <div id="messageBox" class="opacity-0 transition-all duration-300 transform scale-95"></div>
-                
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Start Timer</h2>
-                <div class="card flex flex-col sm:flex-row items-center justify-between mb-8">
-                    <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 w-full">
-                        <select id="timingRiderInput" class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-                        <select id="timingStageSelect" class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-                    </div>
-                    <div class="flex w-full sm:w-auto mt-4 sm:mt-0 sm:ml-4">
-                        <button id="startTimerBtn" class="button w-full px-6 py-2 bg-green-600 text-white font-bold rounded-md shadow-md hover:bg-green-700">Start</button>
-                    </div>
-                </div>
-
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Active Timers</h2>
-                <div class="card p-4 mb-8">
-                    <ul id="activeTimersList" class="space-y-2">
-                        <li class="text-sm text-gray-500">No active timers.</li>
-                    </ul>
-                </div>
-
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-gray-800">Add Riders</h2>
-                    <span id="riderCountDisplay" class="text-sm text-gray-500 font-medium">Riders: 0/100</span>
-                </div>
-                <form id="riderForm" class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                    <input type="number" id="riderNumber" placeholder="Rider Number" required
-                           class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <input type="text" id="riderName" placeholder="Rider Name" required
-                           class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <button type="submit" class="button w-full sm:w-auto px-6 py-2 bg-emerald-600 text-white font-bold rounded-md shadow-md hover:bg-emerald-700">Add Rider</button>
-                </form>
-            </div>
         </div>
 
-        <div id="tablesContainer" class="w-full max-w-6xl space-y-8">
-            <div class="card p-0 overflow-hidden">
-                <h2 class="text-2xl font-bold text-gray-800 p-6">Rider & Stage Times</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead>
-                            <tr>
-                                <!-- Headers generated by JS -->
-                            </tr>
-                        </thead>
-                        <tbody id="ridersTableBody">
-                            <!-- Rider data will be populated here -->
-                        </tbody>
-                    </table>
+        <div id="raceTimerContainer" class="hidden w-full max-w-6xl">
+            <h1 class="text-center font-extrabold text-3xl text-gray-800 mb-1" id="currentRaceNameDisplay"></h1>
+            <p class="text-center font-mono text-sm text-gray-500 mb-4" id="currentRaceIdDisplay"></p>
+            <div id="messageBox" class="opacity-0 transition-all duration-300 transform scale-95"></div>
+            
+            <nav class="flex flex-wrap justify-center gap-1 sm:gap-2 p-2 bg-gray-200 rounded-xl mb-8">
+                 <button id="dashboardTabButton" data-tab="dashboardTab" class="tab-button active text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Dashboard</button>
+                 <button id="timingTabButton" data-tab="timingTab" class="tab-button text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Live Timing</button>
+                 <button id="offlineTabButton" data-tab="offlineTab" class="tab-button text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Offline Timing</button>
+                 <button id="ridersTabButton" data-tab="ridersTab" class="tab-button text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Rider Management</button>
+                 <button id="dataTabButton" data-tab="dataTab" class="tab-button text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Timesheet</button>
+                 <button id="setupTabButton" data-tab="setupTab" class="tab-button text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">Race Setup</button>
+            </nav>
+            <div id="dashboardTab" class="tab-content space-y-8">
+                <div class="card p-0 overflow-hidden">
+                    <div class="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-200 gap-4">
+                        <h2 class="text-2xl font-bold text-gray-800">Current Standings</h2>
+                        <div class="flex items-center space-x-2">
+                            <button id="toggleViewBtn" class="button px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-md shadow-md hover:bg-purple-700">Results Only View</button>
+                            <button id="exportCsvBtn" class="button px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md shadow-md hover:bg-blue-700">Export to CSV</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[600px]">
+                            <thead><tr><th class="text-center">Overall Rank</th><th class="text-center">Cat. Rank</th><th>Rider #</th><th>Name</th><th>Category</th><th>Total Time / Provisional</th></tr></thead>
+                            <tbody id="resultsTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            <div class="card p-0 overflow-hidden">
-                <div class="flex justify-between items-center p-6 border-b border-gray-200">
-                    <h2 class="text-2xl font-bold text-gray-800">Current Standings</h2>
-                    <button id="exportCsvBtn" class="button px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md shadow-md hover:bg-blue-700">Export to CSV</button>
+            <div id="timingTab" class="tab-content hidden space-y-8">
+                <div id="stageSelectionContainer" class="hidden">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Select Your Timing Stage</h2>
+                    <div class="card flex flex-col items-center space-y-4 max-w-md mx-auto">
+                        <label for="timingStationSelect" class="font-medium text-gray-700">Which stage are you timing today?</label>
+                        <select id="timingStationSelect" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                        <button id="startTimingStationBtn" class="button w-full px-6 py-2 bg-indigo-600 text-white font-bold rounded-md shadow-md hover:bg-indigo-700">Start Timing This Stage</button>
+                    </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full min-w-[500px]">
-                        <thead>
-                            <tr>
-                                <th class="px-4 py-3 text-center">Rank</th>
-                                <th class="px-4 py-3">Rider #</th>
-                                <th class="px-4 py-3">Name</th>
-                                <th class="px-4 py-3">Total Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsTableBody">
-                            <!-- Results will be populated here -->
-                        </tbody>
-                    </table>
+                
+                <div id="timingStationActive" class="hidden">
+                     <div class="flex justify-between items-center mb-4"><h2 id="timingStationHeader" class="text-2xl font-bold text-gray-800"></h2><button id="switchStageBtn" class="button px-4 py-2 bg-gray-500 text-white text-sm font-bold rounded-md shadow-md hover:bg-gray-600">Switch Stage</button></div>
+                     <div class="card flex flex-col sm:flex-row items-center justify-between mb-8">
+                         <div class="flex-1 w-full"><select id="timingRiderInput" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select></div>
+                         <div class="w-full sm:w-auto mt-4 sm:mt-0 sm:ml-4"><button id="startTimerBtn" class="button w-full px-6 py-2 bg-green-600 text-white font-bold rounded-md shadow-md hover:bg-green-700">Start Timer</button></div>
+                     </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                           <h3 class="text-xl font-bold text-gray-800 mb-4">Active Timers</h3>
+                           <div class="card p-4"><ul id="activeTimersList" class="space-y-2"></ul></div>
+                        </div>
+                        <div>
+                           <h3 id="stageStandingsHeader" class="text-xl font-bold text-gray-800 mb-4">Stage Standings</h3>
+                           <div class="card p-0 overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="text-center">Rank</th><th>#</th><th>Name</th><th>Time</th></tr></thead><tbody id="stageStandingsBody"></tbody></table></div></div>
+                        </div>
+                     </div>
+                </div>
+            </div>
+
+            <div id="offlineTab" class="tab-content hidden space-y-8">
+                <div id="offlineStageSelectionContainer" class="hidden">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Select Offline Timing Stage</h2>
+                    <div class="card flex flex-col items-center space-y-4 max-w-md mx-auto">
+                        <p class="text-sm text-center text-gray-600">Select a stage to record offline start/finish times. These will be saved to your device and synced when you have a connection.</p>
+                        <label for="offlineTimingStationSelect" class="font-medium text-gray-700">Which stage are you timing offline?</label>
+                        <select id="offlineTimingStationSelect" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                        <button id="startOfflineTimingBtn" class="button w-full px-6 py-2 bg-indigo-600 text-white font-bold rounded-md shadow-md hover:bg-indigo-700">Start Offline Timing</button>
+                    </div>
+                </div>
+                
+                <div id="offlineTimingStationActive" class="hidden">
+                     <div class="flex justify-between items-center mb-4"><h2 id="offlineTimingStationHeader" class="text-2xl font-bold text-gray-800"></h2><button id="switchOfflineStageBtn" class="button px-4 py-2 bg-gray-500 text-white text-sm font-bold rounded-md shadow-md hover:bg-gray-600">Switch Stage</button></div>
+                     
+                     <div class="card flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+                         <div class="flex-1 w-full"><select id="offlineRiderInput" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></select></div>
+                         <div class="w-full sm:w-auto flex space-x-2">
+                             <button id="offlineStartBtn" class="button w-full px-6 py-2 bg-green-600 text-white font-bold rounded-md shadow-md hover:bg-green-700">Start</button>
+                             <button id="offlineFinishBtn" class="button w-full px-6 py-2 bg-red-600 text-white font-bold rounded-md shadow-md hover:bg-red-700">Finish</button>
+                         </div>
+                     </div>
+                     
+                     <div class="card">
+                        <div class="flex justify-between items-center mb-4">
+                           <h3 class="text-xl font-bold text-gray-800">Pending Sync</h3>
+                            <button id="manualSyncBtn" class="button px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md shadow-md hover:bg-blue-700">Sync Now</button>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-4">These times are saved on your device. They will try to sync automatically when you're online.</p>
+                        <ul id="pendingSyncList" class="space-y-2">
+                            </ul>
+                     </div>
+                </div>
+            </div>
+            <div id="ridersTab" class="tab-content hidden space-y-8">
+                 <div class="card">
+                    <div class="flex justify-between items-center mb-4"><h2 class="text-2xl font-bold text-gray-800">Rider Management</h2><span id="riderCountDisplay" class="text-sm text-gray-500 font-medium">Riders: 0/250</span></div>
+                    
+                    <div class="p-4 mb-4 bg-gray-50 border rounded-lg">
+                        <h3 class="font-semibold text-gray-700 mb-2">Bulk Upload Riders</h3>
+                        <p class="text-xs text-gray-500 mb-3">Upload a CSV file with columns: <strong>Number,Name,Category</strong>. The first row should be headers.</p>
+                        <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                            <input type="file" id="riderCsvInput" accept=".csv" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"/>
+                            <button id="processCsvBtn" class="button w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white font-bold text-sm rounded-md shadow-md hover:bg-indigo-700">Upload CSV</button>
+                        </div>
+                    </div>
+                    
+                    <h3 class="font-semibold text-gray-700 mb-2">Add Single Rider</h3>
+                    <form id="riderForm" class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                        <input type="number" id="riderNumber" placeholder="Rider Number" required class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input type="text" id="riderName" placeholder="Rider Name" required class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <select id="riderCategorySelect" class="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">-- No Category --</option>
+                        </select>
+                        <button type="submit" class="button w-full sm:w-auto px-6 py-2 bg-emerald-600 text-white font-bold rounded-md shadow-md hover:bg-emerald-700">Add Rider</button>
+                    </form>
+                 </div>
+                 
+                 </div>
+            
+            <div id="setupTab" class="tab-content hidden space-y-8">
+                 <div class="card">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">Race Setup</h2>
+                    
+                    <div class="p-4 mb-6 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h3 class="font-semibold text-gray-700 mb-2">Display Message for Results App</h3>
+                        <p class="text-xs text-gray-600 mb-3">This message will appear at the top of the sign-up/results page. Use it for announcements, updates, or important information.</p>
+                        <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                            <input type="text" id="displayMessageInput" placeholder="e.g., Race starts at 9am! Good luck riders!" class="flex-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button id="updateDisplayMessageBtn" class="button w-full sm:w-auto px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-md shadow-md hover:bg-blue-700">Update Message</button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 mb-6 bg-gray-50 border rounded-lg">
+                        <h3 class="font-semibold text-gray-700 mb-2">Category Management</h3>
+                        <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2 mb-3">
+                            <input type="text" id="categoryNameInput" placeholder="New Category Name" class="flex-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button id="addCategoryBtn" class="button w-full sm:w-auto px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-md shadow-md hover:bg-blue-700">Add Category</button>
+                        </div>
+                        <div id="categoryListContainer" class="flex flex-wrap items-center">
+                            <p class="text-sm text-gray-500">Loading categories...</p>
+                        </div>
+                    </div>
+                 </div>
+
+                 <div class="card p-6 bg-red-50 border-red-200 border">
+                    <h2 class="text-2xl font-bold text-red-800">Race Settings (Danger Zone)</h2>
+                    <p class="text-sm text-red-600 mt-2 mb-4">Warning: Actions in this section can be destructive and may result in data loss. Proceed with caution.</p>
+                    <button id="editStageCountBtn" class="button px-4 py-2 bg-red-600 text-white font-bold text-sm rounded-md shadow-md hover:bg-red-700">
+                        Change Number of Stages
+                    </button>
+                 </div>
+            </div>
+            <div id="dataTab" class="tab-content hidden space-y-8">
+                 <div class="card p-0 overflow-hidden">
+                    <h2 class="text-2xl font-bold text-gray-800 p-6">Timesheet (Click a time to edit, or 'Edit' to change rider details)</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead><tr></tr></thead>
+                            <tbody id="ridersTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </body>
 </html>
-
