@@ -1,0 +1,9 @@
+{
+  "name": "Enduro Race Timer",
+  "short_name": "Race Timer",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4c51bf",
+  "description": "Offline-capable Enduro Race Timer."
+}
